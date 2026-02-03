@@ -1,0 +1,1745 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>EHS人员违章行为分析应用</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Font Awesome -->
+    <link href="https://cdn.jsdelivr.net/npm/font-awesome@4.7.0/css/font-awesome.min.css" rel="stylesheet">
+    <!-- Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.8/dist/chart.umd.min.js"></script>
+    <!-- SheetJS -->
+    <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+    
+    <!-- Tailwind 配置 -->
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        primary: '#0f172a',
+                        secondary: '#1e293b',
+                        accent: '#3b82f6',
+                        highlight: '#60a5fa',
+                        success: '#10b981',
+                        warning: '#f59e0b',
+                        danger: '#ef4444',
+                        info: '#06b6d4'
+                    },
+                    fontFamily: {
+                        sans: ['Inter', 'system-ui', 'sans-serif']
+                    },
+                    animation: {
+                        'pulse-slow': 'pulse 3s cubic-bezier(0.4, 0, 0.6, 1) infinite',
+                    }
+                }
+            }
+        }
+    </script>
+    
+    <style type="text/tailwindcss">
+        @layer utilities {
+            .text-shadow {
+                text-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            }
+            .bg-gradient-blue {
+                background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
+            }
+            .border-glow {
+                box-shadow: 0 0 5px rgba(59, 130, 246, 0.5);
+            }
+            .scrollbar-thin {
+                scrollbar-width: thin;
+            }
+            .scrollbar-thin::-webkit-scrollbar {
+                width: 6px;
+            }
+            .scrollbar-thin::-webkit-scrollbar-track {
+                background: #1e293b;
+            }
+            .scrollbar-thin::-webkit-scrollbar-thumb {
+                background: #3b82f6;
+                border-radius: 3px;
+            }
+        }
+        
+        /* 全局样式 */
+        body {
+            background-color: #0f172a;
+            color: #f8fafc;
+            font-family: 'Inter', system-ui, sans-serif;
+        }
+        
+        /* 科技风格网格背景 */
+        .grid-bg {
+            background-image: 
+                linear-gradient(rgba(59, 130, 246, 0.1) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(59, 130, 246, 0.1) 1px, transparent 1px);
+            background-size: 20px 20px;
+        }
+        
+        /* 卡片悬浮效果 */
+        .card-hover {
+            transition: all 0.3s ease;
+        }
+        .card-hover:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 10px 25px -5px rgba(59, 130, 246, 0.3);
+        }
+        
+        /* 按钮动画 */
+        .btn-animate {
+            position: relative;
+            overflow: hidden;
+            transition: all 0.3s ease;
+        }
+        .btn-animate:after {
+            content: '';
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            width: 0;
+            height: 0;
+            background: rgba(255, 255, 255, 0.2);
+            border-radius: 50%;
+            transform: translate(-50%, -50%);
+            transition: all 0.5s ease;
+        }
+        .btn-animate:hover:after {
+            width: 300px;
+            height: 300px;
+        }
+        
+        /* 进度条动画 */
+        .progress-bar {
+            transition: width 1s ease-in-out;
+        }
+        
+        /* 表格样式 */
+        .data-table {
+            border-collapse: separate;
+            border-spacing: 0;
+        }
+        .data-table th {
+            background-color: #1e293b;
+            position: sticky;
+            top: 0;
+            z-index: 10;
+        }
+        .data-table th, .data-table td {
+            padding: 0.75rem;
+            border-bottom: 1px solid #334155;
+        }
+        .data-table tr:hover {
+            background-color: rgba(59, 130, 246, 0.1);
+        }
+        
+        /* 加载动画 */
+        .loading-spinner {
+            border: 3px solid rgba(59, 130, 246, 0.3);
+            border-radius: 50%;
+            border-top: 3px solid #3b82f6;
+            width: 24px;
+            height: 24px;
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        
+        /* 标签样式 */
+        .badge {
+            padding: 0.25rem 0.5rem;
+            border-radius: 9999px;
+            font-size: 0.75rem;
+            font-weight: 500;
+        }
+        .badge-level-1 { background-color: rgba(16, 185, 129, 0.2); color: #34d399; }
+        .badge-level-2 { background-color: rgba(245, 158, 11, 0.2); color: #fbbf24; }
+        .badge-level-3 { background-color: rgba(239, 68, 68, 0.2); color: #f87171; }
+        .badge-level-4 { background-color: rgba(220, 38, 38, 0.2); color: #ef4444; }
+        .badge-level-5 { background-color: rgba(153, 27, 27, 0.2); color: #dc2626; }
+        
+        .badge-status-pending { background-color: rgba(245, 158, 11, 0.2); color: #fbbf24; }
+        .badge-status-completed { background-color: rgba(16, 185, 129, 0.2); color: #34d399; }
+    </style>
+</head>
+<body class="min-h-screen grid-bg">
+    <!-- 顶部导航栏 -->
+    <header class="bg-gradient-blue border-b border-accent/30 shadow-lg">
+        <div class="container mx-auto px-4 py-4 flex justify-between items-center">
+            <div class="flex items-center space-x-3">
+                <i class="fa fa-line-chart text-accent text-2xl"></i>
+                <h1 class="text-xl font-bold text-white text-shadow">EHS人员违章行为分析应用</h1>
+            </div>
+            <div class="flex items-center space-x-4">
+                <button id="helpBtn" class="text-gray-300 hover:text-white transition-colors">
+                    <i class="fa fa-question-circle text-lg"></i>
+                </button>
+                <button id="themeToggle" class="text-gray-300 hover:text-white transition-colors">
+                    <i class="fa fa-moon-o text-lg"></i>
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <!-- 主要内容区域 -->
+    <main class="container mx-auto px-4 py-6">
+        <!-- 初始上传区域 -->
+        <div id="uploadSection" class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
+            <!-- 左侧：Excel上传区 -->
+            <div class="lg:col-span-2 bg-secondary rounded-xl shadow-xl border border-accent/20 p-6 card-hover">
+                <div class="flex items-center justify-between mb-6">
+                    <h2 class="text-xl font-semibold text-white flex items-center">
+                        <i class="fa fa-upload text-accent mr-2"></i>
+                        Excel数据上传
+                    </h2>
+                    <span id="fileStatus" class="text-sm text-gray-400">未选择文件</span>
+                </div>
+                
+                <div id="dropZone" class="border-2 border-dashed border-accent/50 rounded-lg p-8 text-center cursor-pointer hover:border-accent transition-colors">
+                    <input type="file" id="fileInput" accept=".xlsx, .xls" class="hidden">
+                    <i class="fa fa-file-excel-o text-4xl text-accent mb-4"></i>
+                    <p class="text-gray-300 mb-2">拖拽Excel文件到此处或点击上传</p>
+                    <p class="text-gray-400 text-sm">支持 .xlsx 和 .xls 格式</p>
+                    <div class="mt-6">
+                        <button id="browseBtn" class="btn-animate bg-accent hover:bg-accent/80 text-white px-6 py-2 rounded-lg font-medium transition-colors">
+                            <i class="fa fa-folder-open mr-2"></i>浏览文件
+                        </button>
+                    </div>
+                </div>
+                
+                <div id="fileInfo" class="mt-6 hidden">
+                    <div class="flex items-center justify-between bg-primary/50 p-4 rounded-lg">
+                        <div class="flex items-center">
+                            <i class="fa fa-file-excel-o text-accent text-xl mr-3"></i>
+                            <div>
+                                <p id="fileName" class="text-white font-medium truncate max-w-md"></p>
+                                <p id="fileSize" class="text-gray-400 text-sm"></p>
+                            </div>
+                        </div>
+                        <button id="removeFile" class="text-gray-400 hover:text-danger transition-colors">
+                            <i class="fa fa-times-circle text-xl"></i>
+                        </button>
+                    </div>
+                </div>
+                
+                <div class="mt-8 flex justify-center">
+                    <button id="analyzeBtn" class="btn-animate bg-success hover:bg-success/80 text-white px-8 py-3 rounded-lg font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center" disabled>
+                        <i class="fa fa-bar-chart mr-2"></i>开始分析
+                    </button>
+                </div>
+            </div>
+            
+            <!-- 右侧：数据格式要求和模板下载 -->
+            <div class="bg-secondary rounded-xl shadow-xl border border-accent/20 p-6 card-hover">
+                <h2 class="text-xl font-semibold text-white flex items-center mb-6">
+                    <i class="fa fa-info-circle text-accent mr-2"></i>
+                    数据格式要求
+                </h2>
+                
+                <div class="space-y-4">
+                    <div class="bg-primary/50 p-4 rounded-lg">
+                        <h3 class="text-white font-medium mb-3">必需字段</h3>
+                        <ul class="space-y-2 text-gray-300">
+                            <li class="flex items-center">
+                                <i class="fa fa-check-circle text-success mr-2"></i>
+                                <span>员工ID</span>
+                            </li>
+                            <li class="flex items-center">
+                                <i class="fa fa-check-circle text-success mr-2"></i>
+                                <span>姓名</span>
+                            </li>
+                            <li class="flex items-center">
+                                <i class="fa fa-check-circle text-success mr-2"></i>
+                                <span>部门</span>
+                            </li>
+                            <li class="flex items-center">
+                                <i class="fa fa-check-circle text-success mr-2"></i>
+                                <span>违规日期 (YYYY-MM-DD)</span>
+                            </li>
+                            <li class="flex items-center">
+                                <i class="fa fa-check-circle text-success mr-2"></i>
+                                <span>违规时间 (HH:MM)</span>
+                            </li>
+                            <li class="flex items-center">
+                                <i class="fa fa-check-circle text-success mr-2"></i>
+                                <span>违规类型</span>
+                            </li>
+                            <li class="flex items-center">
+                                <i class="fa fa-check-circle text-success mr-2"></i>
+                                <span>违规地点</span>
+                            </li>
+                            <li class="flex items-center">
+                                <i class="fa fa-check-circle text-success mr-2"></i>
+                                <span>潜在事故伤害等级 (1-5)</span>
+                            </li>
+                            <li class="flex items-center">
+                                <i class="fa fa-check-circle text-success mr-2"></i>
+                                <span>整改状态</span>
+                            </li>
+                        </ul>
+                    </div>
+                    
+                    <div class="bg-primary/50 p-4 rounded-lg">
+                        <h3 class="text-white font-medium mb-3">下载Excel模板</h3>
+                        <p class="text-gray-300 text-sm mb-4">使用标准模板确保数据格式正确</p>
+                        <button id="downloadTemplate" class="btn-animate w-full bg-accent hover:bg-accent/80 text-white px-4 py-2 rounded-lg font-medium transition-colors flex items-center justify-center">
+                            <i class="fa fa-download mr-2"></i>下载模板
+                        </button>
+                    </div>
+                    
+                    <div class="bg-warning/20 border border-warning/30 p-4 rounded-lg">
+                        <h3 class="text-warning font-medium mb-2 flex items-center">
+                            <i class="fa fa-exclamation-triangle mr-2"></i>
+                            注意事项
+                        </h3>
+                        <ul class="space-y-2 text-gray-300 text-sm">
+                            <li>确保日期格式为 YYYY-MM-DD</li>
+                            <li>确保时间格式为 HH:MM (24小时制)</li>
+                            <li>潜在事故伤害等级应为 1-5 的数字</li>
+                            <li>整改状态建议使用"已整改"或"未整改"</li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- 分析结果区域 -->
+        <div id="analysisSection" class="hidden">
+            <!-- 数据概览卡片 -->
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+                <div class="bg-secondary rounded-xl shadow-xl border border-accent/20 p-6 card-hover">
+                    <div class="flex items-center justify-between mb-4">
+                        <h3 class="text-gray-400 font-medium">总违规记录</h3>
+                        <span class="bg-accent/20 text-accent p-2 rounded-lg">
+                            <i class="fa fa-file-text-o"></i>
+                        </span>
+                    </div>
+                    <p id="totalRecords" class="text-3xl font-bold text-white">0</p>
+                    <div class="mt-2 flex items-center text-sm">
+                        <span id="recordTrend" class="text-success flex items-center">
+                            <i class="fa fa-arrow-up mr-1"></i> 0%
+                        </span>
+                        <span class="text-gray-400 ml-2">较上期</span>
+                    </div>
+                </div>
+                
+                <div class="bg-secondary rounded-xl shadow-xl border border-accent/20 p-6 card-hover">
+                    <div class="flex items-center justify-between mb-4">
+                        <h3 class="text-gray-400 font-medium">涉及员工</h3>
+                        <span class="bg-info/20 text-info p-2 rounded-lg">
+                            <i class="fa fa-users"></i>
+                        </span>
+                    </div>
+                    <p id="totalEmployees" class="text-3xl font-bold text-white">0</p>
+                    <div class="mt-2 flex items-center text-sm">
+                        <span id="employeeTrend" class="text-success flex items-center">
+                            <i class="fa fa-arrow-up mr-1"></i> 0%
+                        </span>
+                        <span class="text-gray-400 ml-2">较上期</span>
+                    </div>
+                </div>
+                
+                <div class="bg-secondary rounded-xl shadow-xl border border-accent/20 p-6 card-hover">
+                    <div class="flex items-center justify-between mb-4">
+                        <h3 class="text-gray-400 font-medium">平均伤害等级</h3>
+                        <span class="bg-warning/20 text-warning p-2 rounded-lg">
+                            <i class="fa fa-exclamation-triangle"></i>
+                        </span>
+                    </div>
+                    <p id="avgSeverity" class="text-3xl font-bold text-white">0.0</p>
+                    <div class="mt-2 flex items-center text-sm">
+                        <span id="severityTrend" class="text-danger flex items-center">
+                            <i class="fa fa-arrow-up mr-1"></i> 0%
+                        </span>
+                        <span class="text-gray-400 ml-2">较上期</span>
+                    </div>
+                </div>
+                
+                <div class="bg-secondary rounded-xl shadow-xl border border-accent/20 p-6 card-hover">
+                    <div class="flex items-center justify-between mb-4">
+                        <h3 class="text-gray-400 font-medium">整改完成率</h3>
+                        <span class="bg-success/20 text-success p-2 rounded-lg">
+                            <i class="fa fa-check-circle"></i>
+                        </span>
+                    </div>
+                    <p id="rectificationRate" class="text-3xl font-bold text-white">0%</p>
+                    <div class="mt-2 flex items-center text-sm">
+                        <span id="rectificationTrend" class="text-success flex items-center">
+                            <i class="fa fa-arrow-up mr-1"></i> 0%
+                        </span>
+                        <span class="text-gray-400 ml-2">较上期</span>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- 高风险员工排行榜 -->
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
+                <div class="bg-secondary rounded-xl shadow-xl border border-accent/20 p-6 card-hover">
+                    <div class="flex items-center justify-between mb-6">
+                        <h2 class="text-xl font-semibold text-white flex items-center">
+                            <i class="fa fa-user-times text-danger mr-2"></i>
+                            高风险员工排行榜
+                        </h2>
+                        <div class="flex space-x-2">
+                            <button class="top-rank-btn bg-primary hover:bg-primary/80 text-white px-3 py-1 rounded-lg text-sm font-medium transition-colors" data-rank="5">TOP 5</button>
+                            <button class="top-rank-btn bg-accent hover:bg-accent/80 text-white px-3 py-1 rounded-lg text-sm font-medium transition-colors" data-rank="10">TOP 10</button>
+                        </div>
+                    </div>
+                    <div class="h-80">
+                        <canvas id="highRiskEmployeesChart"></canvas>
+                    </div>
+                </div>
+                
+                <!-- 易违规地点排行榜 -->
+                <div class="bg-secondary rounded-xl shadow-xl border border-accent/20 p-6 card-hover">
+                    <div class="flex items-center justify-between mb-6">
+                        <h2 class="text-xl font-semibold text-white flex items-center">
+                            <i class="fa fa-map-marker text-warning mr-2"></i>
+                            易违规地点排行榜
+                        </h2>
+                        <div class="flex space-x-2">
+                            <button class="location-rank-btn bg-primary hover:bg-primary/80 text-white px-3 py-1 rounded-lg text-sm font-medium transition-colors" data-rank="5">TOP 5</button>
+                            <button class="location-rank-btn bg-accent hover:bg-accent/80 text-white px-3 py-1 rounded-lg text-sm font-medium transition-colors" data-rank="10">TOP 10</button>
+                        </div>
+                    </div>
+                    <div class="h-80">
+                        <canvas id="highRiskLocationsChart"></canvas>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- 部门违规排行榜和违规类型柱状图 -->
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
+                <div class="bg-secondary rounded-xl shadow-xl border border-accent/20 p-6 card-hover">
+                    <div class="flex items-center justify-between mb-6">
+                        <h2 class="text-xl font-semibold text-white flex items-center">
+                            <i class="fa fa-building text-info mr-2"></i>
+                            部门违规排行榜
+                        </h2>
+                        <div class="flex space-x-2">
+                            <button class="department-rank-btn bg-primary hover:bg-primary/80 text-white px-3 py-1 rounded-lg text-sm font-medium transition-colors" data-rank="5">TOP 5</button>
+                            <button class="department-rank-btn bg-accent hover:bg-accent/80 text-white px-3 py-1 rounded-lg text-sm font-medium transition-colors" data-rank="10">TOP 10</button>
+                        </div>
+                    </div>
+                    <div class="h-80">
+                        <canvas id="departmentViolationsChart"></canvas>
+                    </div>
+                </div>
+                
+                <!-- 违规类型柱状图 -->
+                <div class="bg-secondary rounded-xl shadow-xl border border-accent/20 p-6 card-hover">
+                    <div class="flex items-center justify-between mb-6">
+                        <h2 class="text-xl font-semibold text-white flex items-center">
+                            <i class="fa fa-list-alt text-accent mr-2"></i>
+                            违规类型分布
+                        </h2>
+                        <button id="simplifyTypesBtn" class="bg-primary hover:bg-primary/80 text-white px-3 py-1 rounded-lg text-sm font-medium transition-colors flex items-center">
+                            <i class="fa fa-magic mr-1"></i>精简类型
+                        </button>
+                    </div>
+                    <div class="h-80">
+                        <canvas id="violationTypesChart"></canvas>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- 违规时间分布图 -->
+            <div class="grid grid-cols-1 gap-6 mb-8">
+                <div class="bg-secondary rounded-xl shadow-xl border border-accent/20 p-6 card-hover">
+                    <div class="flex items-center justify-between mb-6">
+                        <h2 class="text-xl font-semibold text-white flex items-center">
+                            <i class="fa fa-clock-o text-highlight mr-2"></i>
+                            违规时间分布 (2小时统计段)
+                        </h2>
+                    </div>
+                    <div class="h-80">
+                        <canvas id="violationTimeChart"></canvas>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- 违规清单 -->
+            <div class="bg-secondary rounded-xl shadow-xl border border-accent/20 p-6 card-hover mb-8">
+                <div class="flex items-center justify-between mb-6">
+                    <h2 class="text-xl font-semibold text-white flex items-center">
+                        <i class="fa fa-table text-success mr-2"></i>
+                        违规清单
+                    </h2>
+                    <div class="flex space-x-2">
+                        <button id="exportDataBtn" class="bg-accent hover:bg-accent/80 text-white px-3 py-1 rounded-lg text-sm font-medium transition-colors flex items-center">
+                            <i class="fa fa-download mr-1"></i>导出数据
+                        </button>
+                    </div>
+                </div>
+                
+                <!-- 筛选器 -->
+                <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+                    <div>
+                        <label class="block text-gray-400 text-sm mb-1">姓名</label>
+                        <input type="text" id="filterName" class="w-full bg-primary/50 border border-accent/30 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-accent">
+                    </div>
+                    <div>
+                        <label class="block text-gray-400 text-sm mb-1">部门</label>
+                        <select id="filterDepartment" class="w-full bg-primary/50 border border-accent/30 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-accent">
+                            <option value="">全部部门</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-gray-400 text-sm mb-1">时间范围</label>
+                        <div class="flex items-center space-x-2">
+                            <input type="date" id="filterStartDate" class="w-full bg-primary/50 border border-accent/30 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-accent">
+                            <span class="text-gray-400">至</span>
+                            <input type="date" id="filterEndDate" class="w-full bg-primary/50 border border-accent/30 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-accent">
+                        </div>
+                    </div>
+                    <div>
+                        <label class="block text-gray-400 text-sm mb-1">地点</label>
+                        <select id="filterLocation" class="w-full bg-primary/50 border border-accent/30 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-accent">
+                            <option value="">全部地点</option>
+                        </select>
+                    </div>
+                </div>
+                
+                <!-- 表格容器 -->
+                <div class="overflow-x-auto scrollbar-thin">
+                    <table id="violationTable" class="data-table w-full min-w-[800px]">
+                        <thead>
+                            <tr>
+                                <th class="text-left text-gray-300 font-medium">员工ID</th>
+                                <th class="text-left text-gray-300 font-medium">姓名</th>
+                                <th class="text-left text-gray-300 font-medium">部门</th>
+                                <th class="text-left text-gray-300 font-medium">违规日期</th>
+                                <th class="text-left text-gray-300 font-medium">违规时间</th>
+                                <th class="text-left text-gray-300 font-medium">违规类型</th>
+                                <th class="text-left text-gray-300 font-medium">违规地点</th>
+                                <th class="text-left text-gray-300 font-medium">伤害等级</th>
+                                <th class="text-left text-gray-300 font-medium">整改状态</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <!-- 数据将通过JavaScript动态填充 -->
+                        </tbody>
+                    </table>
+                </div>
+                
+                <!-- 分页 -->
+                <div class="flex items-center justify-between mt-6">
+                    <div class="text-gray-400 text-sm">
+                        显示 <span id="showingRecords">0</span> 条记录，共 <span id="totalFilteredRecords">0</span> 条
+                    </div>
+                    <div class="flex space-x-2">
+                        <button id="prevPage" class="bg-primary hover:bg-primary/80 text-white px-3 py-1 rounded-lg text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
+                            <i class="fa fa-chevron-left"></i>
+                        </button>
+                        <span id="currentPage" class="bg-accent text-white px-3 py-1 rounded-lg text-sm font-medium">1</span>
+                        <button id="nextPage" class="bg-primary hover:bg-primary/80 text-white px-3 py-1 rounded-lg text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
+                            <i class="fa fa-chevron-right"></i>
+                        </button>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- 数据总结 -->
+            <div class="bg-secondary rounded-xl shadow-xl border border-accent/20 p-6 card-hover">
+                <div class="flex items-center justify-between mb-6">
+                    <h2 class="text-xl font-semibold text-white flex items-center">
+                        <i class="fa fa-lightbulb-o text-warning mr-2"></i>
+                        数据分析总结
+                    </h2>
+                </div>
+                
+                <div id="dataSummary" class="bg-primary/50 p-6 rounded-lg text-gray-300 leading-relaxed">
+                    <!-- 总结内容将通过JavaScript动态填充 -->
+                </div>
+                
+                <div class="mt-8 flex justify-center">
+                    <button id="newAnalysisBtn" class="btn-animate bg-accent hover:bg-accent/80 text-white px-8 py-3 rounded-lg font-medium transition-colors flex items-center">
+                        <i class="fa fa-refresh mr-2"></i>上传新数据
+                    </button>
+                </div>
+            </div>
+        </div>
+        
+        <!-- 加载中遮罩 -->
+        <div id="loadingOverlay" class="fixed inset-0 bg-primary/80 flex items-center justify-center z-50 hidden">
+            <div class="bg-secondary p-8 rounded-xl shadow-2xl border border-accent/30 flex flex-col items-center">
+                <div class="loading-spinner mb-4"></div>
+                <h3 class="text-xl font-semibold text-white mb-2">正在分析数据</h3>
+                <p class="text-gray-300 text-center">请稍候，系统正在处理您的数据...</p>
+                <div class="mt-6 w-64 bg-primary/50 rounded-full h-2.5">
+                    <div id="progressBar" class="bg-accent h-2.5 rounded-full progress-bar" style="width: 0%"></div>
+                </div>
+                <p id="progressText" class="mt-2 text-gray-400 text-sm">0%</p>
+            </div>
+        </div>
+        
+        <!-- 帮助模态框 -->
+        <div id="helpModal" class="fixed inset-0 bg-black/50 flex items-center justify-center z-50 hidden">
+            <div class="bg-secondary max-w-2xl w-full mx-4 rounded-xl shadow-2xl border border-accent/30">
+                <div class="flex items-center justify-between p-6 border-b border-accent/20">
+                    <h3 class="text-xl font-semibold text-white flex items-center">
+                        <i class="fa fa-question-circle text-accent mr-2"></i>
+                        使用帮助
+                    </h3>
+                    <button id="closeHelpModal" class="text-gray-400 hover:text-white transition-colors">
+                        <i class="fa fa-times text-xl"></i>
+                    </button>
+                </div>
+                <div class="p-6 max-h-[70vh] overflow-y-auto scrollbar-thin">
+                    <div class="space-y-4">
+                        <div>
+                            <h4 class="text-white font-medium mb-2">1. 数据准备</h4>
+                            <p class="text-gray-300">下载Excel模板，按照模板格式填写员工违章记录数据，确保包含所有必需字段。</p>
+                        </div>
+                        <div>
+                            <h4 class="text-white font-medium mb-2">2. 上传数据</h4>
+                            <p class="text-gray-300">点击"浏览文件"按钮或拖拽Excel文件到上传区域，系统将自动验证数据格式。</p>
+                        </div>
+                        <div>
+                            <h4 class="text-white font-medium mb-2">3. 开始分析</h4>
+                            <p class="text-gray-300">点击"开始分析"按钮，系统将对数据进行处理并生成各类统计图表和分析结果。</p>
+                        </div>
+                        <div>
+                            <h4 class="text-white font-medium mb-2">4. 查看结果</h4>
+                            <p class="text-gray-300">分析完成后，您可以查看各类排行榜、分布图和详细的违规清单，并可进行筛选和导出操作。</p>
+                        </div>
+                        <div>
+                            <h4 class="text-white font-medium mb-2">5. 数据筛选</h4>
+                            <p class="text-gray-300">在违规清单区域，您可以通过姓名、部门、时间范围和地点进行筛选，快速找到需要的记录。</p>
+                        </div>
+                        <div>
+                            <h4 class="text-white font-medium mb-2">6. 导出数据</h4>
+                            <p class="text-gray-300">点击"导出数据"按钮，可以将筛选后的违规清单导出为CSV格式文件。</p>
+                        </div>
+                    </div>
+                </div>
+                <div class="p-6 border-t border-accent/20 flex justify-end">
+                    <button id="closeHelpBtn" class="btn-animate bg-accent hover:bg-accent/80 text-white px-6 py-2 rounded-lg font-medium transition-colors">
+                        我知道了
+                    </button>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <!-- 页脚 -->
+    <footer class="bg-gradient-blue border-t border-accent/30 py-4 mt-8">
+        <div class="container mx-auto px-4 text-center text-gray-400 text-sm">
+            <p>EHS人员违章行为分析应用 &copy; 2025</p>
+            <p class="mt-1">本地运行，数据安全可靠</p>
+        </div>
+    </footer>
+
+    <script>
+        // 全局变量
+        let violationData = [];
+        let filteredData = [];
+        let currentPage = 1;
+        const recordsPerPage = 10;
+        let charts = {};
+        let originalViolationTypes = {};
+        
+        // DOM元素
+        const fileInput = document.getElementById('fileInput');
+        const dropZone = document.getElementById('dropZone');
+        const browseBtn = document.getElementById('browseBtn');
+        const fileInfo = document.getElementById('fileInfo');
+        const fileName = document.getElementById('fileName');
+        const fileSize = document.getElementById('fileSize');
+        const removeFile = document.getElementById('removeFile');
+        const analyzeBtn = document.getElementById('analyzeBtn');
+        const fileStatus = document.getElementById('fileStatus');
+        const uploadSection = document.getElementById('uploadSection');
+        const analysisSection = document.getElementById('analysisSection');
+        const loadingOverlay = document.getElementById('loadingOverlay');
+        const progressBar = document.getElementById('progressBar');
+        const progressText = document.getElementById('progressText');
+        const downloadTemplate = document.getElementById('downloadTemplate');
+        const helpBtn = document.getElementById('helpBtn');
+        const helpModal = document.getElementById('helpModal');
+        const closeHelpModal = document.getElementById('closeHelpModal');
+        const closeHelpBtn = document.getElementById('closeHelpBtn');
+        const newAnalysisBtn = document.getElementById('newAnalysisBtn');
+        const simplifyTypesBtn = document.getElementById('simplifyTypesBtn');
+        const exportDataBtn = document.getElementById('exportDataBtn');
+        const filterName = document.getElementById('filterName');
+        const filterDepartment = document.getElementById('filterDepartment');
+        const filterLocation = document.getElementById('filterLocation');
+        const filterStartDate = document.getElementById('filterStartDate');
+        const filterEndDate = document.getElementById('filterEndDate');
+        const prevPage = document.getElementById('prevPage');
+        const nextPage = document.getElementById('nextPage');
+        const currentPageEl = document.getElementById('currentPage');
+        const showingRecords = document.getElementById('showingRecords');
+        const totalFilteredRecords = document.getElementById('totalFilteredRecords');
+        const themeToggle = document.getElementById('themeToggle');
+        
+        // 初始化
+        document.addEventListener('DOMContentLoaded', function() {
+            initializeEventListeners();
+            initializeDefaultData();
+        });
+        
+        // 初始化事件监听器
+        function initializeEventListeners() {
+            // 文件上传相关
+            browseBtn.addEventListener('click', () => fileInput.click());
+            fileInput.addEventListener('change', handleFileSelect);
+            dropZone.addEventListener('dragover', handleDragOver);
+            dropZone.addEventListener('drop', handleDrop);
+            removeFile.addEventListener('click', removeSelectedFile);
+            
+            // 分析按钮
+            analyzeBtn.addEventListener('click', startAnalysis);
+            
+            // 下载模板
+            downloadTemplate.addEventListener('click', generateTemplate);
+            
+            // 帮助模态框
+            helpBtn.addEventListener('click', () => helpModal.classList.remove('hidden'));
+            closeHelpModal.addEventListener('click', () => helpModal.classList.add('hidden'));
+            closeHelpBtn.addEventListener('click', () => helpModal.classList.add('hidden'));
+            
+            // 新分析按钮
+            newAnalysisBtn.addEventListener('click', resetAnalysis);
+            
+            // 筛选器
+            filterName.addEventListener('input', applyFilters);
+            filterDepartment.addEventListener('change', applyFilters);
+            filterLocation.addEventListener('change', applyFilters);
+            filterStartDate.addEventListener('change', applyFilters);
+            filterEndDate.addEventListener('change', applyFilters);
+            
+            // 分页
+            prevPage.addEventListener('click', goToPrevPage);
+            nextPage.addEventListener('click', goToNextPage);
+            
+            // 排行榜切换
+            document.querySelectorAll('.top-rank-btn').forEach(btn => {
+                btn.addEventListener('click', () => {
+                    document.querySelectorAll('.top-rank-btn').forEach(b => b.classList.remove('bg-accent'));
+                    btn.classList.add('bg-accent');
+                    updateHighRiskEmployeesChart(parseInt(btn.dataset.rank));
+                });
+            });
+            
+            document.querySelectorAll('.location-rank-btn').forEach(btn => {
+                btn.addEventListener('click', () => {
+                    document.querySelectorAll('.location-rank-btn').forEach(b => b.classList.remove('bg-accent'));
+                    btn.classList.add('bg-accent');
+                    updateHighRiskLocationsChart(parseInt(btn.dataset.rank));
+                });
+            });
+            
+            document.querySelectorAll('.department-rank-btn').forEach(btn => {
+                btn.addEventListener('click', () => {
+                    document.querySelectorAll('.department-rank-btn').forEach(b => b.classList.remove('bg-accent'));
+                    btn.classList.add('bg-accent');
+                    updateDepartmentViolationsChart(parseInt(btn.dataset.rank));
+                });
+            });
+            
+            // 精简类型按钮
+            simplifyTypesBtn.addEventListener('click', simplifyViolationTypes);
+            
+            // 导出数据按钮
+            exportDataBtn.addEventListener('click', exportFilteredData);
+            
+            // 点击模态框外部关闭
+            helpModal.addEventListener('click', (e) => {
+                if (e.target === helpModal) {
+                    helpModal.classList.add('hidden');
+                }
+            });
+        }
+        
+        // 初始化默认数据（演示用）
+        function initializeDefaultData() {
+            // 生成一些示例数据用于演示
+            const mockData = generateMockData();
+            violationData = mockData;
+            filteredData = [...mockData];
+            
+            // 设置文件状态为使用示例数据，但不自动触发分析
+            fileStatus.textContent = '使用示例数据';
+            fileStatus.classList.add('text-success');
+            analyzeBtn.disabled = false;
+            
+            // 如果需要自动演示，可以取消下面的注释
+            /*
+            setTimeout(() => {
+                analyzeBtn.click();
+            }, 1000);
+            */
+        }
+        
+        // 生成模拟数据
+        function generateMockData() {
+            const departments = ['生产部', '质检部', '维修部', '仓储部', '行政部', '研发部', '安全部'];
+            const locations = ['生产车间A', '生产车间B', '质检室', '维修车间', '仓库', '办公楼', '停车场', '食堂', '更衣室', '设备区'];
+            const violationTypes = [
+                '未佩戴安全帽', '未穿安全鞋', '未戴防护手套', '未戴防护眼镜', 
+                '违规操作设备', '未按规定使用工具', '安全通道堵塞', '消防设施遮挡',
+                '违规吸烟', '违规动火', '未系安全带', '违规攀爬', '操作失误',
+                '未进行安全培训', '安全记录缺失', '设备维护不当', '违规用电',
+                '物料堆放不规范', '未设置警示标识', '其他违规'
+            ];
+            const employees = [];
+            
+            // 生成50个员工
+            for (let i = 1; i <= 50; i++) {
+                employees.push({
+                    id: `EMP${String(i).padStart(3, '0')}`,
+                    name: `员工${i}`,
+                    department: departments[Math.floor(Math.random() * departments.length)]
+                });
+            }
+            
+            // 生成300条违规记录
+            const records = [];
+            const startDate = new Date(2025, 0, 1); // 2025年1月1日
+            const endDate = new Date(2025, 5, 30); // 2025年6月30日
+            
+            for (let i = 0; i < 300; i++) {
+                const employee = employees[Math.floor(Math.random() * employees.length)];
+                const date = new Date(startDate.getTime() + Math.random() * (endDate.getTime() - startDate.getTime()));
+                const hour = Math.floor(Math.random() * 24);
+                const minute = Math.floor(Math.random() * 60);
+                const type = violationTypes[Math.floor(Math.random() * violationTypes.length)];
+                const location = locations[Math.floor(Math.random() * locations.length)];
+                const severity = Math.floor(Math.random() * 5) + 1;
+                const rectified = Math.random() > 0.3; // 70%已整改
+                
+                records.push({
+                    employeeId: employee.id,
+                    name: employee.name,
+                    department: employee.department,
+                    date: formatDate(date),
+                    time: `${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}`,
+                    type: type,
+                    location: location,
+                    severity: severity,
+                    rectified: rectified ? '已整改' : '未整改'
+                });
+            }
+            
+            return records;
+        }
+        
+        // 格式化日期
+        function formatDate(date) {
+            return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+        }
+        
+        // 处理文件拖拽
+        function handleDragOver(e) {
+            e.preventDefault();
+            e.stopPropagation();
+            dropZone.classList.add('border-accent');
+        }
+        
+        // 处理文件拖放
+        function handleDrop(e) {
+            e.preventDefault();
+            e.stopPropagation();
+            dropZone.classList.remove('border-accent');
+            
+            if (e.dataTransfer.files.length) {
+                const file = e.dataTransfer.files[0];
+                if (file.type === 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' || 
+                    file.type === 'application/vnd.ms-excel') {
+                    processFile(file);
+                } else {
+                    alert('请上传Excel文件 (.xlsx 或 .xls 格式)');
+                }
+            }
+        }
+        
+        // 处理文件选择
+        function handleFileSelect(e) {
+            if (e.target.files.length) {
+                const file = e.target.files[0];
+                processFile(file);
+            }
+        }
+        
+        // 处理文件
+        function processFile(file) {
+            fileName.textContent = file.name;
+            fileSize.textContent = formatFileSize(file.size);
+            fileInfo.classList.remove('hidden');
+            fileStatus.textContent = '文件已选择';
+            fileStatus.classList.add('text-success');
+            analyzeBtn.disabled = false;
+            
+            // 读取文件内容
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                try {
+                    const data = new Uint8Array(e.target.result);
+                    const workbook = XLSX.read(data, { type: 'array' });
+                    const firstSheetName = workbook.SheetNames[0];
+                    const worksheet = workbook.Sheets[firstSheetName];
+                    const jsonData = XLSX.utils.sheet_to_json(worksheet);
+                    
+                    // 验证数据格式
+                    if (validateData(jsonData)) {
+                        violationData = jsonData;
+                        filteredData = [...jsonData];
+                    } else {
+                        alert('数据格式不正确，请检查是否包含所有必需字段');
+                        removeSelectedFile();
+                    }
+                } catch (error) {
+                    console.error('读取文件时出错:', error);
+                    alert('读取文件时出错，请确保文件格式正确');
+                    removeSelectedFile();
+                }
+            };
+            reader.readAsArrayBuffer(file);
+        }
+        
+        // 验证数据格式
+        function validateData(data) {
+            if (!data || data.length === 0) return false;
+            
+            const requiredFields = [
+                '员工ID', '姓名', '部门', '违规日期', '违规时间', 
+                '违规类型', '违规地点', '潜在事故伤害等级', '整改状态'
+            ];
+            
+            // 检查第一条记录是否包含所有必需字段
+            const firstRecord = data[0];
+            return requiredFields.every(field => firstRecord.hasOwnProperty(field));
+        }
+        
+        // 移除选择的文件
+        function removeSelectedFile() {
+            fileInput.value = '';
+            fileInfo.classList.add('hidden');
+            fileStatus.textContent = '未选择文件';
+            fileStatus.classList.remove('text-success');
+            analyzeBtn.disabled = true;
+            violationData = [];
+            filteredData = [];
+        }
+        
+        // 格式化文件大小
+        function formatFileSize(bytes) {
+            if (bytes < 1024) return bytes + ' B';
+            else if (bytes < 1048576) return (bytes / 1024).toFixed(1) + ' KB';
+            else return (bytes / 1048576).toFixed(1) + ' MB';
+        }
+        
+        // 开始分析
+        function startAnalysis() {
+            uploadSection.classList.add('hidden');
+            loadingOverlay.classList.remove('hidden');
+            
+            // 重置进度条状态
+            progressBar.style.width = '0%';
+            progressText.textContent = '0%';
+            
+            // 模拟进度
+            let progress = 0;
+            const interval = setInterval(() => {
+                progress += 5;
+                progressBar.style.width = `${progress}%`;
+                progressText.textContent = `${progress}%`;
+                
+                if (progress >= 100) {
+                    clearInterval(interval);
+                    setTimeout(() => {
+                        loadingOverlay.classList.add('hidden');
+                        analysisSection.classList.remove('hidden');
+                        displayAnalysisResults();
+                    }, 500);
+                }
+            }, 100);
+        }
+        
+        // 显示分析结果
+        function displayAnalysisResults() {
+            updateSummaryCards();
+            populateFilterOptions();
+            createCharts();
+            updateViolationTable();
+            generateDataSummary();
+        }
+        
+        // 更新摘要卡片
+        function updateSummaryCards() {
+            const total = violationData.length;
+            const uniqueEmployees = new Set(violationData.map(record => record.员工ID)).size;
+            const totalSeverity = violationData.reduce((sum, record) => sum + parseInt(record.潜在事故伤害等级), 0);
+            const avgSeverity = (totalSeverity / total).toFixed(1);
+            const rectifiedCount = violationData.filter(record => record.整改状态 === '已整改').length;
+            const rectificationRate = Math.round((rectifiedCount / total) * 100);
+            
+            document.getElementById('totalRecords').textContent = total;
+            document.getElementById('totalEmployees').textContent = uniqueEmployees;
+            document.getElementById('avgSeverity').textContent = avgSeverity;
+            document.getElementById('rectificationRate').textContent = `${rectificationRate}%`;
+            
+            // 模拟趋势数据（实际应用中可从历史数据计算）
+            document.getElementById('recordTrend').innerHTML = `<i class="fa fa-arrow-up mr-1"></i> ${Math.floor(Math.random() * 20) + 5}%`;
+            document.getElementById('employeeTrend').innerHTML = `<i class="fa fa-arrow-up mr-1"></i> ${Math.floor(Math.random() * 15) + 3}%`;
+            document.getElementById('severityTrend').innerHTML = `<i class="fa fa-arrow-down mr-1"></i> ${Math.floor(Math.random() * 10) + 2}%`;
+            document.getElementById('rectificationTrend').innerHTML = `<i class="fa fa-arrow-up mr-1"></i> ${Math.floor(Math.random() * 25) + 10}%`;
+        }
+        
+        // 填充筛选选项
+        function populateFilterOptions() {
+            // 部门选项
+            const departments = [...new Set(violationData.map(record => record.部门))].sort();
+            const departmentSelect = document.getElementById('filterDepartment');
+            departmentSelect.innerHTML = '<option value="">全部部门</option>';
+            departments.forEach(dept => {
+                const option = document.createElement('option');
+                option.value = dept;
+                option.textContent = dept;
+                departmentSelect.appendChild(option);
+            });
+            
+            // 地点选项
+            const locations = [...new Set(violationData.map(record => record.违规地点))].sort();
+            const locationSelect = document.getElementById('filterLocation');
+            locationSelect.innerHTML = '<option value="">全部地点</option>';
+            locations.forEach(loc => {
+                const option = document.createElement('option');
+                option.value = loc;
+                option.textContent = loc;
+                locationSelect.appendChild(option);
+            });
+            
+            // 设置日期范围
+            const dates = violationData.map(record => new Date(record.违规日期)).sort();
+            if (dates.length > 0) {
+                const minDate = dates[0];
+                const maxDate = dates[dates.length - 1];
+                filterStartDate.value = formatDate(minDate);
+                filterEndDate.value = formatDate(maxDate);
+            }
+        }
+        
+        // 创建图表
+        function createCharts() {
+            createHighRiskEmployeesChart(5);
+            createHighRiskLocationsChart(5);
+            createDepartmentViolationsChart(5);
+            createViolationTypesChart();
+            createViolationTimeChart();
+        }
+        
+        // 创建高风险员工图表
+        function createHighRiskEmployeesChart(topN) {
+            const ctx = document.getElementById('highRiskEmployeesChart').getContext('2d');
+            
+            // 计算每个员工的违规次数和严重程度加权
+            const employeeStats = {};
+            violationData.forEach(record => {
+                const key = `${record.员工ID}-${record.姓名}`;
+                if (!employeeStats[key]) {
+                    employeeStats[key] = {
+                        id: record.员工ID,
+                        name: record.姓名,
+                        department: record.部门,
+                        count: 0,
+                        severitySum: 0
+                    };
+                }
+                employeeStats[key].count++;
+                employeeStats[key].severitySum += parseInt(record.潜在事故伤害等级);
+            });
+            
+            // 计算风险分数（违规次数 * 平均严重程度）
+            const riskScores = Object.values(employeeStats).map(emp => ({
+                ...emp,
+                riskScore: emp.count * (emp.severitySum / emp.count)
+            }));
+            
+            // 排序并取前N名
+            const topEmployees = riskScores.sort((a, b) => b.riskScore - a.riskScore).slice(0, topN);
+            
+            // 创建图表
+            if (charts.highRiskEmployees) {
+                charts.highRiskEmployees.destroy();
+            }
+            
+            charts.highRiskEmployees = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: topEmployees.map(emp => `${emp.name} (${emp.department})`),
+                    datasets: [{
+                        label: '风险分数',
+                        data: topEmployees.map(emp => emp.riskScore.toFixed(1)),
+                        backgroundColor: 'rgba(239, 68, 68, 0.7)',
+                        borderColor: 'rgba(239, 68, 68, 1)',
+                        borderWidth: 1
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    indexAxis: 'y',
+                    plugins: {
+                        legend: {
+                            display: false
+                        },
+                        tooltip: {
+                            callbacks: {
+                                afterLabel: function(context) {
+                                    const index = context.dataIndex;
+                                    const emp = topEmployees[index];
+                                    return [
+                                        `违规次数: ${emp.count}`,
+                                        `平均严重程度: ${(emp.severitySum / emp.count).toFixed(1)}`
+                                    ];
+                                }
+                            }
+                        }
+                    },
+                    scales: {
+                        x: {
+                            beginAtZero: true,
+                            grid: {
+                                color: 'rgba(255, 255, 255, 0.1)'
+                            },
+                            ticks: {
+                                color: 'rgba(255, 255, 255, 0.7)'
+                            }
+                        },
+                        y: {
+                            grid: {
+                                display: false
+                            },
+                            ticks: {
+                                color: 'rgba(255, 255, 255, 0.7)'
+                            }
+                        }
+                    }
+                }
+            });
+        }
+        
+        // 更新高风险员工图表
+        function updateHighRiskEmployeesChart(topN) {
+            createHighRiskEmployeesChart(topN);
+        }
+        
+        // 创建高风险地点图表
+        function createHighRiskLocationsChart(topN) {
+            const ctx = document.getElementById('highRiskLocationsChart').getContext('2d');
+            
+            // 计算每个地点的违规次数和严重程度加权
+            const locationStats = {};
+            violationData.forEach(record => {
+                const location = record.违规地点;
+                if (!locationStats[location]) {
+                    locationStats[location] = {
+                        count: 0,
+                        severitySum: 0
+                    };
+                }
+                locationStats[location].count++;
+                locationStats[location].severitySum += parseInt(record.潜在事故伤害等级);
+            });
+            
+            // 计算风险分数
+            const riskScores = Object.entries(locationStats).map(([location, stats]) => ({
+                location,
+                riskScore: stats.count * (stats.severitySum / stats.count)
+            }));
+            
+            // 排序并取前N名
+            const topLocations = riskScores.sort((a, b) => b.riskScore - a.riskScore).slice(0, topN);
+            
+            // 创建图表
+            if (charts.highRiskLocations) {
+                charts.highRiskLocations.destroy();
+            }
+            
+            charts.highRiskLocations = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: topLocations.map(loc => loc.location),
+                    datasets: [{
+                        label: '风险分数',
+                        data: topLocations.map(loc => loc.riskScore.toFixed(1)),
+                        backgroundColor: 'rgba(245, 158, 11, 0.7)',
+                        borderColor: 'rgba(245, 158, 11, 1)',
+                        borderWidth: 1
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    indexAxis: 'y',
+                    plugins: {
+                        legend: {
+                            display: false
+                        },
+                        tooltip: {
+                            callbacks: {
+                                afterLabel: function(context) {
+                                    const index = context.dataIndex;
+                                    const loc = topLocations[index];
+                                    const stats = locationStats[loc.location];
+                                    return [
+                                        `违规次数: ${stats.count}`,
+                                        `平均严重程度: ${(stats.severitySum / stats.count).toFixed(1)}`
+                                    ];
+                                }
+                            }
+                        }
+                    },
+                    scales: {
+                        x: {
+                            beginAtZero: true,
+                            grid: {
+                                color: 'rgba(255, 255, 255, 0.1)'
+                            },
+                            ticks: {
+                                color: 'rgba(255, 255, 255, 0.7)'
+                            }
+                        },
+                        y: {
+                            grid: {
+                                display: false
+                            },
+                            ticks: {
+                                color: 'rgba(255, 255, 255, 0.7)'
+                            }
+                        }
+                    }
+                }
+            });
+        }
+        
+        // 更新高风险地点图表
+        function updateHighRiskLocationsChart(topN) {
+            createHighRiskLocationsChart(topN);
+        }
+        
+        // 创建部门违规图表
+        function createDepartmentViolationsChart(topN) {
+            const ctx = document.getElementById('departmentViolationsChart').getContext('2d');
+            
+            // 计算每个部门的违规次数
+            const departmentCounts = {};
+            violationData.forEach(record => {
+                const dept = record.部门;
+                departmentCounts[dept] = (departmentCounts[dept] || 0) + 1;
+            });
+            
+            // 排序并取前N名
+            const sortedDepartments = Object.entries(departmentCounts)
+                .sort((a, b) => b[1] - a[1])
+                .slice(0, topN);
+            
+            // 创建图表
+            if (charts.departmentViolations) {
+                charts.departmentViolations.destroy();
+            }
+            
+            charts.departmentViolations = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: sortedDepartments.map(([dept]) => dept),
+                    datasets: [{
+                        label: '违规次数',
+                        data: sortedDepartments.map(([, count]) => count),
+                        backgroundColor: 'rgba(6, 182, 212, 0.7)',
+                        borderColor: 'rgba(6, 182, 212, 1)',
+                        borderWidth: 1
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            display: false
+                        }
+                    },
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            grid: {
+                                color: 'rgba(255, 255, 255, 0.1)'
+                            },
+                            ticks: {
+                                color: 'rgba(255, 255, 255, 0.7)'
+                            }
+                        },
+                        x: {
+                            grid: {
+                                display: false
+                            },
+                            ticks: {
+                                color: 'rgba(255, 255, 255, 0.7)'
+                            }
+                        }
+                    }
+                }
+            });
+        }
+        
+        // 更新部门违规图表
+        function updateDepartmentViolationsChart(topN) {
+            createDepartmentViolationsChart(topN);
+        }
+        
+        // 创建违规类型图表
+        function createViolationTypesChart() {
+            const ctx = document.getElementById('violationTypesChart').getContext('2d');
+            
+            // 计算每种违规类型的次数
+            const typeCounts = {};
+            violationData.forEach(record => {
+                const type = record.违规类型;
+                typeCounts[type] = (typeCounts[type] || 0) + 1;
+            });
+            
+            // 保存原始类型数据
+            originalViolationTypes = { ...typeCounts };
+            
+            // 排序
+            const sortedTypes = Object.entries(typeCounts)
+                .sort((a, b) => b[1] - a[1]);
+            
+            // 创建图表
+            if (charts.violationTypes) {
+                charts.violationTypes.destroy();
+            }
+            
+            charts.violationTypes = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: sortedTypes.map(([type]) => type),
+                    datasets: [{
+                        label: '违规次数',
+                        data: sortedTypes.map(([, count]) => count),
+                        backgroundColor: 'rgba(59, 130, 246, 0.7)',
+                        borderColor: 'rgba(59, 130, 246, 1)',
+                        borderWidth: 1
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            display: false
+                        }
+                    },
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            grid: {
+                                color: 'rgba(255, 255, 255, 0.1)'
+                            },
+                            ticks: {
+                                color: 'rgba(255, 255, 255, 0.7)'
+                            }
+                        },
+                        x: {
+                            grid: {
+                                display: false
+                            },
+                            ticks: {
+                                color: 'rgba(255, 255, 255, 0.7)',
+                                maxRotation: 45,
+                                minRotation: 45
+                            }
+                        }
+                    }
+                }
+            });
+        }
+        
+        // 精简违规类型
+        function simplifyViolationTypes() {
+            // 定义常见违规类型的分类
+            const typeCategories = {
+                '个人防护': ['未佩戴安全帽', '未穿安全鞋', '未戴防护手套', '未戴防护眼镜', '未系安全带'],
+                '操作规范': ['违规操作设备', '未按规定使用工具', '操作失误'],
+                '环境管理': ['安全通道堵塞', '消防设施遮挡', '物料堆放不规范', '未设置警示标识'],
+                '明火管理': ['违规吸烟', '违规动火'],
+                '培训与记录': ['未进行安全培训', '安全记录缺失'],
+                '设备维护': ['设备维护不当'],
+                '用电安全': ['违规用电']
+            };
+            
+            // 统计各类别的违规次数
+            const categoryCounts = {};
+            let otherCount = 0;
+            
+            Object.entries(originalViolationTypes).forEach(([type, count]) => {
+                let categorized = false;
+                for (const [category, types] of Object.entries(typeCategories)) {
+                    if (types.some(t => type.includes(t))) {
+                        categoryCounts[category] = (categoryCounts[category] || 0) + count;
+                        categorized = true;
+                        break;
+                    }
+                }
+                if (!categorized) {
+                    otherCount += count;
+                }
+            });
+            
+            // 添加其他类别
+            if (otherCount > 0) {
+                categoryCounts['其他'] = otherCount;
+            }
+            
+            // 排序
+            const sortedCategories = Object.entries(categoryCounts)
+                .sort((a, b) => b[1] - a[1]);
+            
+            // 更新图表
+            charts.violationTypes.data.labels = sortedCategories.map(([category]) => category);
+            charts.violationTypes.data.datasets[0].data = sortedCategories.map(([, count]) => count);
+            charts.violationTypes.update();
+            
+            // 更改按钮文本
+            simplifyTypesBtn.innerHTML = '<i class="fa fa-undo mr-1"></i>恢复原始';
+            simplifyTypesBtn.removeEventListener('click', simplifyViolationTypes);
+            simplifyTypesBtn.addEventListener('click', restoreOriginalTypes);
+        }
+        
+        // 恢复原始违规类型
+        function restoreOriginalTypes() {
+            createViolationTypesChart();
+            
+            // 更改按钮文本
+            simplifyTypesBtn.innerHTML = '<i class="fa fa-magic mr-1"></i>精简类型';
+            simplifyTypesBtn.removeEventListener('click', restoreOriginalTypes);
+            simplifyTypesBtn.addEventListener('click', simplifyViolationTypes);
+        }
+        
+        // 创建违规时间分布图表
+        function createViolationTimeChart() {
+            const ctx = document.getElementById('violationTimeChart').getContext('2d');
+            
+            // 按2小时统计段计算违规次数
+            const timeSlots = Array(12).fill(0); // 0-2, 2-4, ..., 22-24
+            
+            violationData.forEach(record => {
+                const time = record.违规时间;
+                const hour = parseInt(time.split(':')[0]);
+                const slotIndex = Math.floor(hour / 2);
+                timeSlots[slotIndex]++;
+            });
+            
+            // 创建标签
+            const labels = Array(12).fill(0).map((_, i) => {
+                const start = i * 2;
+                const end = (i + 1) * 2;
+                return `${start.toString().padStart(2, '0')}-${end.toString().padStart(2, '0')}`;
+            });
+            
+            // 创建图表
+            if (charts.violationTime) {
+                charts.violationTime.destroy();
+            }
+            
+            charts.violationTime = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        label: '违规次数',
+                        data: timeSlots,
+                        backgroundColor: 'rgba(96, 165, 250, 0.7)',
+                        borderColor: 'rgba(96, 165, 250, 1)',
+                        borderWidth: 1
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            display: false
+                        }
+                    },
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            grid: {
+                                color: 'rgba(255, 255, 255, 0.1)'
+                            },
+                            ticks: {
+                                color: 'rgba(255, 255, 255, 0.7)'
+                            }
+                        },
+                        x: {
+                            grid: {
+                                display: false
+                            },
+                            ticks: {
+                                color: 'rgba(255, 255, 255, 0.7)'
+                            }
+                        }
+                    }
+                }
+            });
+        }
+        
+        // 更新违规清单表格
+        function updateViolationTable() {
+            const tableBody = document.querySelector('#violationTable tbody');
+            tableBody.innerHTML = '';
+            
+            const startIndex = (currentPage - 1) * recordsPerPage;
+            const endIndex = startIndex + recordsPerPage;
+            const pageData = filteredData.slice(startIndex, endIndex);
+            
+            pageData.forEach(record => {
+                const row = document.createElement('tr');
+                
+                // 设置单元格内容
+                row.innerHTML = `
+                    <td class="text-gray-300">${record.员工ID}</td>
+                    <td class="text-white font-medium">${record.姓名}</td>
+                    <td class="text-gray-300">${record.部门}</td>
+                    <td class="text-gray-300">${record.违规日期}</td>
+                    <td class="text-gray-300">${record.违规时间}</td>
+                    <td class="text-gray-300">${record.违规类型}</td>
+                    <td class="text-gray-300">${record.违规地点}</td>
+                    <td>
+                        <span class="badge badge-level-${record.潜在事故伤害等级}">
+                            等级 ${record.潜在事故伤害等级}
+                        </span>
+                    </td>
+                    <td>
+                        <span class="badge ${record.整改状态 === '已整改' ? 'badge-status-completed' : 'badge-status-pending'}">
+                            ${record.整改状态}
+                        </span>
+                    </td>
+                `;
+                
+                tableBody.appendChild(row);
+            });
+            
+            // 更新分页信息
+            showingRecords.textContent = pageData.length;
+            totalFilteredRecords.textContent = filteredData.length;
+            currentPageEl.textContent = currentPage;
+            
+            // 更新分页按钮状态
+            prevPage.disabled = currentPage === 1;
+            nextPage.disabled = endIndex >= filteredData.length;
+        }
+        
+        // 应用筛选
+        function applyFilters() {
+            const nameFilter = filterName.value.toLowerCase();
+            const departmentFilter = filterDepartment.value;
+            const locationFilter = filterLocation.value;
+            const startDateFilter = filterStartDate.value;
+            const endDateFilter = filterEndDate.value;
+            
+            filteredData = violationData.filter(record => {
+                const nameMatch = record.姓名.toLowerCase().includes(nameFilter);
+                const departmentMatch = !departmentFilter || record.部门 === departmentFilter;
+                const locationMatch = !locationFilter || record.违规地点 === locationFilter;
+                
+                const recordDate = record.违规日期;
+                const dateMatch = (!startDateFilter || recordDate >= startDateFilter) && 
+                                 (!endDateFilter || recordDate <= endDateFilter);
+                
+                return nameMatch && departmentMatch && locationMatch && dateMatch;
+            });
+            
+            currentPage = 1;
+            updateViolationTable();
+        }
+        
+        // 上一页
+        function goToPrevPage() {
+            if (currentPage > 1) {
+                currentPage--;
+                updateViolationTable();
+            }
+        }
+        
+        // 下一页
+        function goToNextPage() {
+            const maxPage = Math.ceil(filteredData.length / recordsPerPage);
+            if (currentPage < maxPage) {
+                currentPage++;
+                updateViolationTable();
+            }
+        }
+        
+        // 生成数据总结
+        function generateDataSummary() {
+            const summaryElement = document.getElementById('dataSummary');
+            
+            // 计算关键指标
+            const total = violationData.length;
+            const uniqueEmployees = new Set(violationData.map(record => record.员工ID)).size;
+            const departments = [...new Set(violationData.map(record => record.部门))];
+            const locations = [...new Set(violationData.map(record => record.违规地点))];
+            
+            // 计算各部门违规次数
+            const departmentCounts = {};
+            violationData.forEach(record => {
+                const dept = record.部门;
+                departmentCounts[dept] = (departmentCounts[dept] || 0) + 1;
+            });
+            
+            // 找出违规最多的部门
+            const maxDeptEntry = Object.entries(departmentCounts).reduce((max, current) => 
+                current[1] > max[1] ? current : max
+            );
+            
+            // 计算各伤害等级的分布
+            const severityCounts = { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 };
+            violationData.forEach(record => {
+                const severity = record.潜在事故伤害等级;
+                severityCounts[severity]++;
+            });
+            
+            // 计算时间分布
+            const timeSlots = Array(12).fill(0);
+            violationData.forEach(record => {
+                const hour = parseInt(record.违规时间.split(':')[0]);
+                const slotIndex = Math.floor(hour / 2);
+                timeSlots[slotIndex]++;
+            });
+            
+            // 找出违规最多的时间段
+            const maxTimeSlot = timeSlots.indexOf(Math.max(...timeSlots));
+            const maxTimeRange = `${(maxTimeSlot * 2).toString().padStart(2, '0')}-${((maxTimeSlot + 1) * 2).toString().padStart(2, '0')}`;
+            
+            // 计算整改率
+            const rectifiedCount = violationData.filter(record => record.整改状态 === '已整改').length;
+            const rectificationRate = Math.round((rectifiedCount / total) * 100);
+            
+            // 生成总结文本
+            let summaryHTML = `
+                <p class="mb-4"><strong>数据概览：</strong>本次分析共包含 ${total} 条违规记录，涉及 ${uniqueEmployees} 名员工、${departments.length} 个部门和 ${locations.length} 个地点。</p>
+                
+                <p class="mb-4"><strong>部门分析：</strong>${maxDeptEntry[0]} 是违规记录最多的部门，共 ${maxDeptEntry[1]} 次违规，占总违规数的 ${Math.round((maxDeptEntry[1] / total) * 100)}%。</p>
+                
+                <p class="mb-4"><strong>时间分析：</strong>违规行为在 ${maxTimeRange} 时间段最为集中，该时段发生了 ${timeSlots[maxTimeSlot]} 次违规，占总违规数的 ${Math.round((timeSlots[maxTimeSlot] / total) * 100)}%。</p>
+                
+                <p class="mb-4"><strong>严重程度分析：</strong>
+            `;
+            
+            // 添加严重程度分布
+            for (let i = 5; i >= 1; i--) {
+                const percentage = Math.round((severityCounts[i] / total) * 100);
+                summaryHTML += `等级 ${i} 违规 ${severityCounts[i]} 次（${percentage}%）${i > 1 ? '，' : '。'}`;
+            }
+            
+            summaryHTML += `</p>
+                
+                <p class="mb-4"><strong>整改情况：</strong>已完成整改 ${rectifiedCount} 项，整改率为 ${rectificationRate}%。</p>
+                
+                <p class="mb-4"><strong>建议措施：</strong></p>
+                <ul class="list-disc pl-5 space-y-2">
+                    <li>加强 ${maxDeptEntry[0]} 部门的安全培训和监督检查</li>
+                    <li>在 ${maxTimeRange} 时间段增加安全巡检频次</li>
+                    <li>针对等级 4-5 的高风险违规行为制定专项整改计划</li>
+                    <li>对未整改的 ${total - rectifiedCount} 项违规行为进行跟踪落实</li>
+                </ul>
+            `;
+            
+            summaryElement.innerHTML = summaryHTML;
+        }
+        
+        // 导出筛选后的数据
+        function exportFilteredData() {
+            if (filteredData.length === 0) {
+                alert('没有可导出的数据');
+                return;
+            }
+            
+            // 创建CSV内容
+            let csvContent = "员工ID,姓名,部门,违规日期,违规时间,违规类型,违规地点,潜在事故伤害等级,整改状态\n";
+            
+            filteredData.forEach(record => {
+                csvContent += `${record.员工ID},${record.姓名},${record.部门},${record.违规日期},${record.违规时间},${record.违规类型},${record.违规地点},${record.潜在事故伤害等级},${record.整改状态}\n`;
+            });
+            
+            // 创建下载链接
+            const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.setAttribute('href', url);
+            link.setAttribute('download', `违规记录_${formatDate(new Date())}.csv`);
+            link.style.visibility = 'hidden';
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+        }
+        
+        // 生成Excel模板
+        function generateTemplate() {
+            // 创建工作簿
+            const wb = XLSX.utils.book_new();
+            
+            // 创建工作表数据 - 直接创建包含20条记录的静态数据
+            const wsData = [
+                ['员工ID', '姓名', '部门', '违规日期', '违规时间', '违规类型', '违规地点', '潜在事故伤害等级', '整改状态'],
+                ['EMP001', '张三', '生产部', '2025-01-05', '09:30', '未佩戴安全帽', '生产车间A', '3', '已整改'],
+                ['EMP001', '张三', '生产部', '2025-01-12', '14:20', '违规操作设备', '生产车间B', '4', '未整改'],
+                ['EMP001', '张三', '生产部', '2025-02-01', '10:15', '未穿安全鞋', '生产车间A', '2', '已整改'],
+                ['EMP002', '李四', '维修部', '2025-01-08', '11:45', '违规操作设备', '维修车间', '4', '未整改'],
+                ['EMP002', '李四', '维修部', '2025-01-20', '16:30', '未按规定使用工具', '维修车间', '3', '已整改'],
+                ['EMP002', '李四', '维修部', '2025-02-15', '09:10', '违规用电', '设备区', '5', '未整改'],
+                ['EMP003', '王五', '质检部', '2025-01-10', '13:20', '未戴防护眼镜', '质检室', '2', '已整改'],
+                ['EMP003', '王五', '质检部', '2025-01-25', '15:40', '安全记录缺失', '质检室', '1', '已整改'],
+                ['EMP003', '王五', '质检部', '2025-02-20', '11:25', '未戴防护手套', '质检室', '2', '已整改'],
+                ['EMP004', '赵六', '仓储部', '2025-01-15', '08:30', '物料堆放不规范', '仓库', '3', '未整改'],
+                ['EMP004', '赵六', '仓储部', '2025-02-05', '14:10', '安全通道堵塞', '仓库', '4', '未整改'],
+                ['EMP004', '赵六', '仓储部', '2025-02-28', '09:50', '未设置警示标识', '仓库', '2', '已整改'],
+                ['EMP005', '钱七', '行政部', '2025-01-18', '10:30', '违规吸烟', '办公楼', '3', '已整改'],
+                ['EMP006', '孙八', '研发部', '2025-01-22', '15:15', '未进行安全培训', '研发室', '1', '已整改'],
+                ['EMP007', '周九', '安全部', '2025-01-28', '09:45', '设备维护不当', '设备区', '4', '未整改'],
+                ['EMP008', '吴十', '生产部', '2025-02-08', '13:50', '违规攀爬', '生产车间B', '5', '未整改'],
+                ['EMP001', '张三', '生产部', '2025-02-12', '11:20', '违规动火', '生产车间A', '5', '未整改'],
+                ['EMP002', '李四', '维修部', '2025-02-18', '16:25', '操作失误', '维修车间', '3', '已整改'],
+                ['EMP003', '王五', '质检部', '2025-03-01', '10:40', '未系安全带', '质检室', '4', '未整改'],
+                ['EMP004', '赵六', '仓储部', '2025-03-05', '14:30', '消防设施遮挡', '仓库', '3', '已整改']
+            ];
+            
+            // 创建工作表
+            const ws = XLSX.utils.aoa_to_sheet(wsData);
+            
+            // 添加工作表到工作簿
+            XLSX.utils.book_append_sheet(wb, ws, '违规记录模板');
+            
+            // 生成Excel文件并下载
+            XLSX.writeFile(wb, 'EHS违规记录模板.xlsx');
+        }
+        
+        // 重置分析
+        function resetAnalysis() {
+            // 重置图表
+            Object.values(charts).forEach(chart => chart.destroy());
+            charts = {};
+            
+            // 重置数据
+            violationData = [];
+            filteredData = [];
+            currentPage = 1;
+            
+            // 重置UI
+            analysisSection.classList.add('hidden');
+            uploadSection.classList.remove('hidden');
+            removeSelectedFile();
+        }
+    </script>
+</body>
+</html>
